@@ -1,142 +1,89 @@
-
 // Matrix multiply device code
 #include <assert.h>
 #include <math.h>
 #include "utils.h"
 #include "types.h"
+#include <stdio.h>
 
 using namespace std;
-#define BLOCK_SIZE 32
-#define ROW_BLOCK_SIZE BLOCK_SIZE
-#define COL_BLOCK_SIZE BLOCK_SIZE
-#define NUM_SIMULTANEOUS_C_ROW_ELEMENTS 2
-#define NUM_SIMULTANEOUS_C_COL_ELEMENTS 2
+#define TW BLOCKDIM_X//32
 
-__global__ void matMul(int square_dim, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B) {
-    int num_elements = square_dim * square_dim;
-    int ty = threadIdx.y;
-    int tx = threadIdx.x;
+__global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B) {
+    __shared__ double As[TW][TW], Bs[TW][TW];
+    int ty = threadIdx.y, tx = threadIdx.x;
+    int by = blockIdx.y, bx = blockIdx.x;
+    double Cij = 0;
+    double Cij_4 = 0;
+    double Cij_8 = 0;
+    double Cij_12 = 0;
+    double Cij_16 = 0;
+    double Cij_20 = 0;
+    double Cij_24 = 0;
+    double Cij_28 = 0;
+    if (N % TW || BLOCKDIM_X != BLOCKDIM_Y * 8) {
+        int I = min(N - 1, by * TW + ty);
+        int J = min(N - 1, bx * TW + tx);
 
-    //since we are operating on adjacent squares
-    int by = (blockIdx.y * NUM_SIMULTANEOUS_C_COL_ELEMENTS);
-    int bx = (blockIdx.x * NUM_SIMULTANEOUS_C_ROW_ELEMENTS);
-
-    __shared__ _DOUBLE_ A_0y[ROW_BLOCK_SIZE][COL_BLOCK_SIZE];
-    __shared__ _DOUBLE_ A_1y[ROW_BLOCK_SIZE][COL_BLOCK_SIZE];
-    __shared__ _DOUBLE_ B_x0[COL_BLOCK_SIZE][ROW_BLOCK_SIZE];
-    __shared__ _DOUBLE_ B_x1[COL_BLOCK_SIZE][ROW_BLOCK_SIZE];
-
-    // the four element to be updated
-    _DOUBLE_ c_00 = 0;
-    _DOUBLE_ c_01 = 0;
-    _DOUBLE_ c_10 = 0;
-    _DOUBLE_ c_11 = 0;
-
-    int r0 = (by) * ROW_BLOCK_SIZE + ty;
-    int r1 = (by + 1) * ROW_BLOCK_SIZE + ty;
-    int c0 = (bx) * COL_BLOCK_SIZE + tx;
-    int c1 = (bx + 1) * COL_BLOCK_SIZE + tx;
-
-    //parameters for loop
-    int B_step = ROW_BLOCK_SIZE * square_dim;
-    int B_x0_index = c0 + ty * square_dim;
-    int B_x1_index = c1 + ty * square_dim;
-    int A_0y_index = r0 * square_dim + tx;
-    int A_1y_index = r1 * square_dim + tx;
-
+        if ((I < N) && (J < N)) {
 #pragma unroll
-    for (unsigned int stride = 0;
-         stride < gridDim.x * NUM_SIMULTANEOUS_C_COL_ELEMENTS;
-         ++stride
-                 , A_0y_index += COL_BLOCK_SIZE
-                 , A_1y_index += COL_BLOCK_SIZE
-                 , B_x0_index += B_step
-                 , B_x1_index += B_step) {
+            for (int kk = 0; kk < (N / TW + int(bool(N % TW))); kk++) {
+                As[ty][tx] = __ldg(&A[I * N + kk * TW + tx]);
+                Bs[ty][tx] = __ldg(&B[(kk * TW + ty) * N + J]);
 
-/*load sub-blocks into shared memory: each thread does one load to each array*/
-        //check if both rows of A are within block
-        if (A_1y_index < num_elements) {
-            A_0y[ty][tx] = A[A_0y_index];
-            A_1y[ty][tx] = A[A_1y_index];
-        } else {// if second row out of border, padding with 0
-            A_1y[ty][tx] = 0;
-            //check if A0y is within block
-            if (A_0y_index < num_elements) {
-                A_0y[ty][tx] = A[A_0y_index];
-            } else {// if not, padding with 0
-                A_0y[ty][tx] = 0;
-            }
-        }
-
-        // same as for sub block A
-        if (B_x1_index < num_elements) {
-            B_x0[ty][tx] = B[B_x0_index];
-            B_x1[ty][tx] = B[B_x1_index];
-        } else {
-            B_x1[ty][tx] = 0;
-            if (B_x0_index < num_elements) {
-                B_x0[ty][tx] = B[B_x0_index];
-            } else {
-                B_x0[ty][tx] = 0;
-            }
-        }
-        __syncthreads();
-
-
-/* Compute and update c_00 - c_11
- * Each thread within the block dim loops over rows to add results
- * Note: due to thread divergence, produced marginally better results than having all threads compute*/
-
-        if (r1 < square_dim) { // if within row bound
-            if (c1 < square_dim) {//all fit
+                __syncthreads();
 #pragma unroll
-                for (unsigned int k = 0; k < COL_BLOCK_SIZE; ++k) {
-                    c_00 += A_0y[ty][k] * B_x0[k][tx];//
-                    c_01 += A_0y[ty][k] * B_x1[k][tx];//
-                    c_10 += A_1y[ty][k] * B_x0[k][tx];//
-                    c_11 += A_1y[ty][k] * B_x1[k][tx];//
+                for (int k = 0; k < min(TW, N - kk * TW); k++) {
+                    Cij += As[ty][k] * Bs[k][tx];
                 }
-            } else if (c0 < square_dim) {//if within col bound
-#pragma unroll
-                for (unsigned int k = 0; k < COL_BLOCK_SIZE; ++k) {
-                    c_00 += A_0y[ty][k] * B_x0[k][tx];//
-                    c_10 += A_1y[ty][k] * B_x0[k][tx];//
-                }
+                __syncthreads();
             }
-        } else if ((r0 < square_dim)) { // if within matrix bounds
-            if (c1 < square_dim) {//both cols fit
+            C[I * N + J] = Cij;
+
+        }
+    } else {
+        int I = by * TW + ty;
+        int J = bx * TW + tx;
+        if ((I < N) && (J < N)) {
 #pragma unroll
-                for (unsigned int k = 0; k < COL_BLOCK_SIZE; ++k) {
-                    c_00 += A_0y[ty][k] * B_x0[k][tx];//
-                    c_01 += A_0y[ty][k] * B_x1[k][tx];//
-                }
-            } else if (c0 < square_dim) {//only 1 col fits
+            for (int kk = 0; kk < N / TW; kk++) {
+                As[ty][tx] = __ldg(&A[I * N + kk * TW + tx]);
+                Bs[ty][tx] = __ldg(&B[(kk * TW + ty) * N + J]);
+                As[ty + (TW / 8)][tx] = __ldg(&A[(I + (TW / 8)) * N + kk * TW + tx]);
+                Bs[ty + (TW / 8)][tx] = __ldg(&B[(kk * TW + ty + (TW / 8)) * N + J]);
+                As[ty + (TW / 4)][tx] = __ldg(&A[(I + (TW / 4)) * N + kk * TW + tx]);
+                Bs[ty + (TW / 4)][tx] = __ldg(&B[(kk * TW + ty + (TW / 4)) * N + J]);
+                As[ty + (3 * TW / 8)][tx] = __ldg(&A[(I + (3 * TW / 8)) * N + kk * TW + tx]);
+                Bs[ty + (3 * TW / 8)][tx] = __ldg(&B[(kk * TW + ty + (3 * TW / 8)) * N + J]);
+                As[ty + (TW / 2)][tx] = __ldg(&A[(I + (TW / 2)) * N + kk * TW + tx]);
+                Bs[ty + (TW / 2)][tx] = __ldg(&B[(kk * TW + ty + (TW / 2)) * N + J]);
+                As[ty + (5 * TW / 8)][tx] = __ldg(&A[(I + (5 * TW / 8)) * N + kk * TW + tx]);
+                Bs[ty + (5 * TW / 8)][tx] = __ldg(&B[(kk * TW + ty + (5 * TW / 8)) * N + J]);
+                As[ty + (3 * TW / 4)][tx] = __ldg(&A[(I + (3 * TW / 4)) * N + kk * TW + tx]);
+                Bs[ty + (3 * TW / 4)][tx] = __ldg(&B[(kk * TW + ty + (3 * TW / 4)) * N + J]);
+                As[ty + (7 * TW / 8)][tx] = __ldg(&A[(I + (7 * TW / 8)) * N + kk * TW + tx]);
+                Bs[ty + (7 * TW / 8)][tx] = __ldg(&B[(kk * TW + ty + (7 * TW / 8)) * N + J]);
+                __syncthreads();
 #pragma unroll
-                for (unsigned int k = 0; k < COL_BLOCK_SIZE; ++k) {
-                    c_00 += A_0y[ty][k] * B_x0[k][tx];//
+                for (int k = 0; k < TW; k++) {
+                    Cij += As[ty][k] * Bs[k][tx];
+                    Cij_4 += As[ty + (TW / 8)][k] * Bs[k][tx];
+                    Cij_8 += As[ty + (TW / 4)][k] * Bs[k][tx];
+                    Cij_12 += As[ty + (3 * TW / 8)][k] * Bs[k][tx];
+                    Cij_16 += As[ty + (TW / 2)][k] * Bs[k][tx];
+                    Cij_20 += As[ty + (5 * TW / 8)][k] * Bs[k][tx];
+                    Cij_24 += As[ty + (3 * TW / 4)][k] * Bs[k][tx];
+                    Cij_28 += As[ty + (7 * TW / 8)][k] * Bs[k][tx];
                 }
+                __syncthreads();
             }
-        }
-        __syncthreads();
-    }
-// Update C matrix
-    if (r1 < square_dim) { // if within row bound
-        if (c1 < square_dim) {//all fit
-            C[r0 * square_dim + c0] = c_00;
-            C[r0 * square_dim + c1] = c_01;
-            C[r1 * square_dim + c0] = c_10;
-            C[r1 * square_dim + c1] = c_11;
-        } else if (c0 < square_dim) {//if within col bound
-            C[r0 * square_dim + c0] = c_00;
-            C[r1 * square_dim + c0] = c_10;
-        }
-    } else if ((r0 < square_dim)) { // if within matrix bounds
-        if (c1 < square_dim) {//both cols fit
-            C[r0 * square_dim + c0] = c_00;
-            C[r0 * square_dim + c1] = c_01;
-        } else if (c0 < square_dim) {//only 1 col fits
-            C[r0 * square_dim + c0] = c_00;
+            C[I * N + J] = Cij;
+            C[(I + (TW / 8)) * N + J] = Cij_4;
+            C[(I + (TW / 4)) * N + J] = Cij_8;
+            C[(I + (3 * TW / 8)) * N + J] = Cij_12;
+            C[(I + (TW / 2)) * N + J] = Cij_16;
+            C[(I + (5 * TW / 8)) * N + J] = Cij_20;
+            C[(I + (3 * TW / 4)) * N + J] = Cij_24;
+            C[(I + (7 * TW / 8)) * N + J] = Cij_28;
         }
     }
 }
-
