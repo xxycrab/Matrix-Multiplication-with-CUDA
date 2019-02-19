@@ -8,8 +8,8 @@
 using namespace std;
 #define TW  64 // C block size 64 * 64
 #define TS 32 // B: 32 * 64  A: 64 * 32
-#define NUMOPT 4 // 4 output per thread
-#define OPS 2 // output per side
+#define NUMOPT 16 // 4 output per thread
+#define OPS 4 // output per side
 
 __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B) {
     int ty = threadIdx.y, tx = threadIdx.x;
@@ -27,16 +27,22 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B) {
 
     for(int k = 0; k < KNUM; ++k) {
         int K0 = k * TS;
+        
         #pragma unroll
-        for(int i = 0; i < TW; i += blockDim.y) {
-            int Ay = I + i;
-            int Ax = K0 + tx;
-            int By = K0 + ty;
-            int Bx = J + i;
+        for(int j = 0; j < TS; j += blockDim.y) {
+            int Ax = K0 + tx + j;
+            int By = K0 + ty + j;
 
-            AS[ty + i][tx] = (Ay < N && Ax < N) ? __ldg(&A[Ay * N + Ax]) : 0.0;
-            BS[ty][tx + i] = (By < N && Bx < N) ? __ldg(&B[By * N + Bx]) : 0.0;
+            #pragma unroll
+            for(int i = 0; i < TW; i += blockDim.y) {
+                int Ay = I + i;
+                int Bx = J + i;
+    
+                AS[ty + i][tx + j] = (Ay < N && Ax < N) ? __ldg(&A[Ay * N + Ax]) : 0.0;
+                BS[ty + j][tx + i] = (By < N && Bx < N) ? __ldg(&B[By * N + Bx]) : 0.0;
+            }
         }
+
         __syncthreads();
 
         for(int kk = 0; kk < TS; ++kk) {
