@@ -6,10 +6,10 @@
 #include <stdio.h>
 
 using namespace std;
-#define TW  64 // C block size 64 * 64
-#define TS 16 // B: 32 * 64  A: 64 * 32
-#define NUMOPT 16 // 4 output per thread
-#define OPS 4 // output per side
+#define TW  32 // C block size 64 * 64
+#define TS 32 // B: 32 * 64  A: 64 * 32
+#define NUMOPT 4 // 4 output per thread
+#define OPS 2 // output per side
 
 __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B) {
     int ty = threadIdx.y, tx = threadIdx.x;
