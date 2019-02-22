@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <assert.h>
+#include <iostream>
+
 void setGrid(int n, dim3 &blockDim, dim3 &gridDim)
 {
     // set your block dimensions and grid dimensions here
@@ -8,4 +12,6 @@ void setGrid(int n, dim3 &blockDim, dim3 &gridDim)
         gridDim.x++;
     if(n % (blockDim.y*4) != 0)
         gridDim.y++;
+    cudaSharedMemConfig  shmPreference = cudaSharedMemBankSizeEightByte;
+    cudaDeviceSetSharedMemConfig(shmPreference);
 }
