@@ -25,8 +25,8 @@ B: Jiawen Fang
 meetings 	  	  	8              8
 coding 	  	  	        16             16
 writeup 	  	  	8              8
-planning (alone) 	  	  	       4
-total (including meetings) 	  	       36 
+planning (alone) 	        4
+total (including meetings) 	36 
 
 
 (3) Describe 
