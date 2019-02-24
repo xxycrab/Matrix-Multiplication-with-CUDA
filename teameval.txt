@@ -1,12 +1,12 @@
                        CSE 260, Parallel Computation
                                 (Winter 2019)
-                Department of Computer Science and Engineering 	
-                     University of California, San Diego 	
+                Department of Computer Science and Engineering
+                     University of California, San Diego
 
 
 		Team Self Evaluation Form, Assignment #2
 
-Each team must submit one copy of this self evaluation form. 
+Each team must submit one copy of this self evaluation form.
 The members of each team should discuss how they
 worked together and what to write for the evaluation.
 
@@ -14,22 +14,22 @@ worked together and what to write for the evaluation.
 
 A: Xinyu Xie(A53285829)
 
- 
-B: Jiawen Fang
 
- 
- 
+B: Jiawen Fang (A53243757)
+
+
+
 (2) Estimate how much time each team member devoted to this project, in HOURS.
 
   	                        A 	       B
 meetings 	  	  	8              8
 coding 	  	  	        16             16
 writeup 	  	  	8              8
-planning (alone) 	        4
-total (including meetings) 	36 
+planning (alone) 	        4          4
+total (including meetings) 	36         36
 
 
-(3) Describe 
+(3) Describe
   (a) what the major responsibilities of each team member were;
       We almost share every part of the work. Generally, we take turns to implement an idea and debug for each other.
   (b) whether or not you completed the assignment;
